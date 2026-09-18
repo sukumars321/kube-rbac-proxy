@@ -98,6 +98,22 @@ Global flags:
       --version version[=true]   --version, --version=raw prints version information and quits; --version=vX.Y.Z... sets the reported version
 ```
 
+### TLS policy and certificate reload
+
+`--tls-min-version`, `--tls-cipher-suites`, and `--tls-curve-preferences` are
+applied when the proxy starts. Changing these policy values requires a rollout
+or restart; they are not reloaded at runtime. The certificate reloader watches
+the files supplied through `--tls-cert-file` and `--tls-private-key-file`, so
+certificate and key contents can change without changing the TLS policy.
+
+Go does not permit selecting TLS 1.3 cipher suites through `tls.Config`. A
+controller enforcing a strict external TLS profile must reject a profile that
+requires a TLS 1.3 cipher restriction the proxy cannot express.
+
+The proxy does not watch the OpenShift `APIServer` object. Controllers that
+consume an OpenShift `TLSSecurityProfile` must resolve it to proxy flags and
+roll out the workload when the profile or adherence policy changes.
+
 
 ### How to update Go dependencies
 

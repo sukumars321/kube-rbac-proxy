@@ -18,6 +18,7 @@ package app
 
 import (
 	cryptotls "crypto/tls"
+	"reflect"
 	"testing"
 
 	"github.com/brancz/kube-rbac-proxy/cmd/kube-rbac-proxy/app/options"
@@ -50,6 +51,97 @@ func TestApplyTLSConfigFromFlags(t *testing.T) {
 	}
 	if config.MinVersion != cryptotls.VersionTLS12 {
 		t.Errorf("MinVersion = %d, want %d", config.MinVersion, cryptotls.VersionTLS12)
+	}
+}
+
+func TestApplyTLSConfigSetsMinVersionAndCipherSuites(t *testing.T) {
+	tests := []struct {
+		name        string
+		minVersion  string
+		ciphers     []string
+		wantMin     uint16
+		wantCiphers []uint16
+	}{
+		{
+			name:        "short TLS 1.2 name",
+			minVersion:  "TLS1.2",
+			ciphers:     []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+			wantMin:     cryptotls.VersionTLS12,
+			wantCiphers: []uint16{cryptotls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256},
+		},
+		{
+			name:        "Go TLS 1.3 name",
+			minVersion:  "VersionTLS13",
+			ciphers:     []string{"TLS_AES_128_GCM_SHA256"},
+			wantMin:     cryptotls.VersionTLS13,
+			wantCiphers: []uint16{cryptotls.TLS_AES_128_GCM_SHA256},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &cryptotls.Config{}
+			if err := applyTLSConfig(config, &options.TLSConfig{
+				MinVersion:   tt.minVersion,
+				CipherSuites: tt.ciphers,
+			}); err != nil {
+				t.Fatalf("applyTLSConfig() returned an error: %v", err)
+			}
+			if config.MinVersion != tt.wantMin {
+				t.Errorf("MinVersion = %d, want %d", config.MinVersion, tt.wantMin)
+			}
+			if !reflect.DeepEqual(config.CipherSuites, tt.wantCiphers) {
+				t.Errorf("CipherSuites = %v, want %v", config.CipherSuites, tt.wantCiphers)
+			}
+		})
+	}
+}
+
+func TestApplyTLSConfigRejectsUnsupportedTLSValues(t *testing.T) {
+	tests := []struct {
+		name    string
+		options *options.TLSConfig
+	}{
+		{
+			name:    "unsupported minimum version",
+			options: &options.TLSConfig{MinVersion: "VersionTLS99"},
+		},
+		{
+			name:    "unsupported cipher suite",
+			options: &options.TLSConfig{MinVersion: "VersionTLS12", CipherSuites: []string{"NOT_A_CIPHER"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := applyTLSConfig(&cryptotls.Config{}, tt.options); err == nil {
+				t.Fatal("applyTLSConfig() returned no error")
+			}
+		})
+	}
+}
+
+func TestApplyTLSConfigLeavesCipherDefaultsWhenUnset(t *testing.T) {
+	config := &cryptotls.Config{}
+	if err := applyTLSConfig(config, &options.TLSConfig{MinVersion: "VersionTLS12"}); err != nil {
+		t.Fatalf("applyTLSConfig() returned an error: %v", err)
+	}
+	if config.CipherSuites != nil {
+		t.Fatalf("CipherSuites = %v, want nil so Go defaults remain active", config.CipherSuites)
+	}
+}
+
+func TestNormalizeTLSVersion(t *testing.T) {
+	tests := map[string]string{
+		"TLS1.2":       "VersionTLS12",
+		"TLS1.3":       "VersionTLS13",
+		"VersionTLS12": "VersionTLS12",
+		"unsupported":  "unsupported",
+	}
+	for input, want := range tests {
+		if got := normalizeTLSVersion(input); got != want {
+			t.Errorf("normalizeTLSVersion(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 

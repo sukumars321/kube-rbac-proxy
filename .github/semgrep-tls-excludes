@@ -1,0 +1,4 @@
+# Temporary, reviewed exceptions for RHOAIENG-94454.
+# Keep each suppression scoped to one rule and source file.
+go-http-server-tls-override:cmd/kube-rbac-proxy/app/kube-rbac-proxy.go
+go-http-client-tls-override:cmd/kube-rbac-proxy/app/transport.go
